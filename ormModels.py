@@ -24,7 +24,7 @@ class staffPosition(enum.Enum):
     waiters = "waiters"
     employee = "employee"
 
-class menuStatus(enum.Enum):
+class menuStatus(enum.Enum):    
     available = "available"   
     outofstock = "outOfStock"
 

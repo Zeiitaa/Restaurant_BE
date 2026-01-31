@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db
 from dotenv import load_dotenv
 import os
-from ormModels import staffRole
+from ormModels import staffPosition
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -27,7 +27,7 @@ class TokenPayload(BaseModel):
     """Isi token setelah di-decode"""
     sub: Optional[str] = None   # staff_id 
     username: Optional[str] = None # username
-    role: Optional[str] = None  # anggota/petugas
+    position: Optional[str] = None  # anggota/petugas
     exp: Optional[int] = None   # expiry time
     
     
@@ -54,25 +54,25 @@ def verify_access_token(token: str = Depends(oauth2_scheme)) -> TokenPayload:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         staff_id: str = payload.get("sub")
-        role: str = payload.get("role")
-        if staff_id is None or role is None:
+        position: str = payload.get("position")
+        if staff_id is None or position is None:
             raise credentials_exception
         
-        return TokenPayload(sub=staff_id, role=role, exp=payload.get("exp"))
+        return TokenPayload(sub=staff_id, position=position, exp=payload.get("exp"))
     except JWTError:
         raise credentials_exception
     
-    """ ================= ROLE CHECK DEPENDENCY ================= """
-def require_role(*allowed_roles: staffRole):
+    """ ================= POSITION CHECK DEPENDENCY ================= """
+def require_position(*allowed_position: staffPosition):
     """
-    Dependency reusable untuk membatasi akses endpoint berdasarkan role.
+    Dependency reusable untuk membatasi akses endpoint berdasarkan Position.
     """
     def dependency(current_user: Staff = Depends(get_current_staff)):
-        if current_user.role not in allowed_roles:
-            allowed = ', '.join([role.value for role in allowed_roles])
+        if current_user.position not in allowed_position:
+            allowed = ', '.join([position.value for position in allowed_position])
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Your role doesn't allow this action. Required role: {allowed}"
+                detail=f"Your position doesn't allow this action. Required position: {allowed}"
             )
         return current_user
     return dependency

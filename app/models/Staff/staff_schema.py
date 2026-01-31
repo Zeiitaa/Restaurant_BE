@@ -10,17 +10,20 @@ class staffStatus(str, Enum):
     inactive = "inactive"
     resign = "resign"
 
-class staffRole(str, Enum):
-    admin = "admin"
+class staffPosition(str, Enum):
+    admin = "admin" 
     manager = "manager"
     waiters = "waiters"
+    employee = "employee"
 
 # Buat Base Model
 class StaffBase(BaseModel):
     name: str = Field(..., description="Please input your name", examples=["Andhika"])
+    phone_number: str = Field(..., description="Please input your phone number", examples=["08123456789"])
+    address: str = Field(..., description="Please input your address", examples=["Jl. Contoh No. 01"])
     username: str = Field(..., description="Please input your username", examples=["Zeita"])
     status: staffStatus = Field(..., description="Please input your status", examples=[staffStatus.active])    
-    role: staffRole = Field(..., description="Please input your role", examples=[staffRole.waiters])
+    position: staffPosition = Field(..., description="Please input your position", examples=[staffPosition.waiters])
 
 class staffCreate(StaffBase):
     password: str = Field(..., description="Please input your password")
@@ -30,7 +33,7 @@ class staffUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
     status: Optional[staffStatus] = None
-    role: Optional[staffRole] = None
+    positon: Optional[staffPosition] = None
 
 class staffResponse(StaffBase):
     id: int
@@ -38,6 +41,8 @@ class staffResponse(StaffBase):
 
 class staffRegister(BaseModel):
     name: str = Field(..., description="Please input your name", examples=["Andhika"])
+    phone_number: str = Field(..., description="Please input your phone number", examples=["08123456789"])
+    address: str = Field(..., description="Please input your address", examples=["Jl. Contoh No. 01"])
     username: str = Field(..., description="Please input your username", examples=["Zeita"])
     password: str = Field(..., description="Please input your password")
     

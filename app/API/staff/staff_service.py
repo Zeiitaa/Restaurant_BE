@@ -1,5 +1,5 @@
 from app.models.Staff.staff_schema import staffUpdate, staffRegister, staffResponse, staffCreate
-from ormModels import Staff, staffRole, staffStatus
+from ormModels import Staff, staffPosition, staffStatus
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.security import hash_password, verify_password
@@ -8,10 +8,12 @@ from app.core.security import hash_password, verify_password
 def create_staff(db:Session, request:staffCreate ):
     new_staff = Staff(
         name = request.name,
+        phone_number = request.phone_number,
+        address = request.address,
         username = request.username,
         password = hash_password(request.password),
         status = request.status,
-        role = request.role
+        position = request.position
     )
     db.add(new_staff)
     db.commit()
@@ -71,9 +73,11 @@ def deactivate_staff(id: int, request:staffUpdate, db:Session):
 def register_staff(db:Session, request: staffRegister):
     new_staff = Staff(
         name = request.name,
+        phone_number = request.phone_number,
+        address = request.address,
         username = request.username,
         password = hash_password(request.password),
-        role = staffRole.waiters ,
+        position = staffPosition.waiters ,
         status = staffStatus.active
     )
     db.add(new_staff)

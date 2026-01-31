@@ -23,8 +23,8 @@ def login_staff(db: Session, username: str, password: str) -> Token:
         subject=str(staff.id),
         extra={
             "username": staff.username,
-            "role": staff.role.value
-            } #ngambil role dari user (Table databse Enum)
+            "position": staff.position.value
+            } #ngambil position dari user (Table databse Enum)
     )
 
     return Token(access_token=access_token, token_type="bearer")
