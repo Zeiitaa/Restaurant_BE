@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.API.staff import staff_routers
+from app.API.User import user_routers
 from app.API.auth import auth_router
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,4 +26,4 @@ async def read_root():
     return {"message": "Welcome to the Restaurant API Service!"}
 
 app.include_router(auth_router.router)
-app.include_router(staff_routers.router)
+app.include_router(user_routers.router)

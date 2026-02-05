@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 2a97beb20076
+Revision ID: 36d15ac975e0
 Revises: 
-Create Date: 2026-01-20 09:23:38.259698
+Create Date: 2026-02-03 08:36:55.165899
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '2a97beb20076'
+revision: str = '36d15ac975e0'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -27,18 +27,6 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_categories_id'), 'categories', ['id'], unique=False)
-    op.create_table('staff',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('name', sa.String(), nullable=False),
-    sa.Column('phone_number', sa.String(), nullable=False),
-    sa.Column('address', sa.String(), nullable=False),
-    sa.Column('username', sa.String(), nullable=False),
-    sa.Column('password', sa.String(), nullable=False),
-    sa.Column('status', sa.Enum('active', 'inactive', 'resign', name='staffstatus'), nullable=False),
-    sa.Column('position', sa.Enum('admin', 'manager', 'waiters', 'employee', name='staffposition'), nullable=False),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_staff_id'), 'staff', ['id'], unique=False)
     op.create_table('tables',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('table_code', sa.Integer(), nullable=False),
@@ -48,6 +36,15 @@ def upgrade() -> None:
     sa.UniqueConstraint('table_code')
     )
     op.create_index(op.f('ix_tables_id'), 'tables', ['id'], unique=False)
+    op.create_table('users',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('username', sa.String(), nullable=False),
+    sa.Column('password', sa.String(), nullable=False),
+    sa.Column('status', sa.Enum('active', 'inactive', 'resign', name='userstatus'), nullable=False),
+    sa.Column('role', sa.Enum('admin', 'manager', 'waiters', 'employee', 'customer', name='userrole'), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_users_id'), 'users', ['id'], unique=False)
     op.create_table('menu',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(), nullable=False),
@@ -65,16 +62,40 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('date', sa.DateTime(), nullable=False),
     sa.Column('table_id', sa.Integer(), nullable=False),
-    sa.Column('staff_id', sa.Integer(), nullable=False),
+    sa.Column('customer_id', sa.Integer(), nullable=True),
+    sa.Column('staff_id', sa.Integer(), nullable=True),
+    sa.Column('guest_name', sa.String(), nullable=True),
     sa.Column('total_amount', sa.DECIMAL(precision=10, scale=2), nullable=False),
     sa.Column('method', sa.Enum('cash', 'qris', name='paymenttype'), nullable=False),
     sa.Column('payment_status', sa.Enum('unpaid', 'paid', name='paymentstatus'), nullable=False),
     sa.Column('order_status', sa.Enum('preparing', 'served', 'cancelled', name='orderstatus'), nullable=False),
-    sa.ForeignKeyConstraint(['staff_id'], ['staff.id'], ),
+    sa.ForeignKeyConstraint(['customer_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['staff_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['table_id'], ['tables.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_orders_id'), 'orders', ['id'], unique=False)
+    op.create_table('staffDetails',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('users_id', sa.Integer(), nullable=True),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('phone_number', sa.String(), nullable=False),
+    sa.Column('address', sa.String(), nullable=False),
+    sa.ForeignKeyConstraint(['users_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('users_id')
+    )
+    op.create_index(op.f('ix_staffDetails_id'), 'staffDetails', ['id'], unique=False)
+    op.create_table('userDetails',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('users_id', sa.Integer(), nullable=True),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('phone_number', sa.String(), nullable=False),
+    sa.Column('address', sa.String(), nullable=False),
+    sa.ForeignKeyConstraint(['users_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('users_id')
+    )
     op.create_table('detailedOrder',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('order_id', sa.Integer(), nullable=True),
@@ -107,14 +128,17 @@ def downgrade() -> None:
     op.drop_table('update_stocks')
     op.drop_index(op.f('ix_detailedOrder_id'), table_name='detailedOrder')
     op.drop_table('detailedOrder')
+    op.drop_table('userDetails')
+    op.drop_index(op.f('ix_staffDetails_id'), table_name='staffDetails')
+    op.drop_table('staffDetails')
     op.drop_index(op.f('ix_orders_id'), table_name='orders')
     op.drop_table('orders')
     op.drop_index(op.f('ix_menu_id'), table_name='menu')
     op.drop_table('menu')
+    op.drop_index(op.f('ix_users_id'), table_name='users')
+    op.drop_table('users')
     op.drop_index(op.f('ix_tables_id'), table_name='tables')
     op.drop_table('tables')
-    op.drop_index(op.f('ix_staff_id'), table_name='staff')
-    op.drop_table('staff')
     op.drop_index(op.f('ix_categories_id'), table_name='categories')
     op.drop_table('categories')
     # ### end Alembic commands ###
