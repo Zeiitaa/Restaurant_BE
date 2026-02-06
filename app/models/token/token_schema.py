@@ -12,7 +12,7 @@ class Token(BaseModel):
 class TokenPayload(BaseModel):
     sub: Optional[str] = None #ini adalah ID
     username: Optional[str] = None
-    position: Optional[str] = None 
+    role: Optional[str] = None 
     exp: Optional[str] = None #Expired waktu Token
 
 class LoginRequest(BaseModel):

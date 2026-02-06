@@ -4,8 +4,8 @@ from database import getDB
 from app.API.auth import auth_service
 from app.core.auth import Token
 from fastapi.security import OAuth2PasswordRequestForm
-from app.core.auth import get_current_user, require_position
-from app.models.User.user_schema import UserResponse, UserRegister
+from app.core.auth import get_current_user, require_role
+from app.models.User.user_schema import UserResponse, UserRegister, UserDetailCreateBase, UserDetailResponse
 from ormModels import Users
 from pydantic import BaseModel
 import database
@@ -23,3 +23,7 @@ def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: Session
 @router.post("/register", response_model=UserResponse)
 def regist_endpoint(request:UserRegister, db:Session = Depends(database.getDB)):
     return auth_service.register_user(db, request)
+
+@router.post("/register-detail", response_model=UserDetailResponse)
+def regist_detail_endpoint(request:UserDetailCreateBase, db:Session = Depends(database.getDB), current_user:Users = Depends(get_current_user)):
+    return auth_service.register_detail_user(db, request, current_user.id)

@@ -27,7 +27,7 @@ class TokenPayload(BaseModel):
     """Isi token setelah di-decode"""
     sub: Optional[str] = None   # user_id 
     username: Optional[str] = None # username
-    position: Optional[str] = None  # anggota/petugas
+    role: Optional[str] = None  # anggota/petugas
     exp: Optional[int] = None   # expiry time
     
     
@@ -54,25 +54,30 @@ def verify_access_token(token: str = Depends(oauth2_scheme)) -> TokenPayload:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
-        position: str = payload.get("position")
-        if user_id is None or position is None:
+        role: str = payload.get("role")
+        if user_id is None:
             raise credentials_exception
         
-        return TokenPayload(sub=user_id, position=position, exp=payload.get("exp"))
+        return TokenPayload(
+            sub=user_id, 
+            role=role, # Bisa None jika tidak ada
+            username=payload.get("username"),
+            exp=payload.get("exp")
+        )
     except JWTError:
         raise credentials_exception
     
-    """ ================= POSITION CHECK DEPENDENCY ================= """
-def require_position(*allowed_position: UserRole):
+    """ ================= ROLE CHECK DEPENDENCY ================= """
+def require_role(*allowed_role: UserRole):
     """
-    Dependency reusable untuk membatasi akses endpoint berdasarkan Position.
+    Dependency reusable untuk membatasi akses endpoint berdasarkan role.
     """
     def dependency(current_user: Users = Depends(get_current_user)):
-        if current_user.position not in allowed_position:
-            allowed = ', '.join([position.value for position in allowed_position])
+        if current_user.role not in allowed_role:
+            allowed = ', '.join([role.value for role in allowed_role])
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Your position doesn't allow this action. Required position: {allowed}"
+                detail=f"Your role doesn't allow this action. Required role: {allowed}"
             )
         return current_user
     return dependency

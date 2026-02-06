@@ -107,13 +107,13 @@ class Users(base):
     user_detail = relationship("UserDetails", back_populates="users", uselist=False)
     staff_detail = relationship("StaffDetails", back_populates="users", uselist=False)
     staff_orders = relationship("Orders", back_populates="staff", foreign_keys="[Orders.staff_id]") 
-    customers_orders = relationship("Orders", back_populates="customer", foreign_keys="[Orders.customer_id]") 
+    customer_orders = relationship("Orders", back_populates="customer", foreign_keys="[Orders.customer_id]") 
 
 class UserDetails(base):
     __tablename__ = "userDetails"
 
     id = Column(Integer, primary_key=True)
-    users_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    users_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     name = Column(String, nullable=False)
     phone_number = Column(String, nullable=False)
     address = Column(String, nullable=False)
