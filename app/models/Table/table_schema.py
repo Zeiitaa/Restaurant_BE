@@ -34,3 +34,9 @@ class TableResponse(TableBase):
 class TableDelete(BaseModel):
     id: int
 
+class TableDeleteResponse(BaseModel):
+    detail: str
+    data: TableResponse
+    
+    class ConfigDict:
+        from_attributes = True
