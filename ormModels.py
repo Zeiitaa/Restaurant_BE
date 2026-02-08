@@ -92,8 +92,10 @@ class Update_stock(base):
     menu_id = Column(Integer, ForeignKey("menu.id"), nullable=False)
     stock_after = Column(Integer, nullable=False)
     date = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    users_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     menu = relationship("Menu", back_populates="update")
+    user = relationship("Users", back_populates="stock_updates")
 
 class Users(base):
     __tablename__ = "users"
@@ -108,6 +110,7 @@ class Users(base):
     staff_detail = relationship("StaffDetails", back_populates="users", uselist=False)
     staff_orders = relationship("Orders", back_populates="staff", foreign_keys="[Orders.staff_id]") 
     customer_orders = relationship("Orders", back_populates="customer", foreign_keys="[Orders.customer_id]") 
+    stock_updates = relationship("Update_stock", back_populates="user")
 
 class UserDetails(base):
     __tablename__ = "userDetails"

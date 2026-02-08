@@ -7,7 +7,7 @@ from enum import Enum
 #ENUM
 class menuStatus(str, Enum):
     available = "available"   
-    outofstock = "outOfStock"\
+    outofstock = "outOfStock"
     
 # base
 class MenuBase(BaseModel):
