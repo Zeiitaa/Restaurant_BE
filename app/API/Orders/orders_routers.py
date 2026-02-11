@@ -14,8 +14,9 @@ def create_order(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    # Only staff/admin can create orders (or mobile client with token)
-    return OrdersService.create_order(db=db, order_data=order_data, staff_id=current_user["id"])
+    # Determine staff_id (null if ordered by customer)
+    staff_id = current_user["id"] if current_user["role"] != "customer" else None
+    return OrdersService.create_order(db=db, order_data=order_data, staff_id=staff_id)
 
 @router.get("/", response_model=List[OrdersResponse])
 def get_all_orders(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -52,7 +53,7 @@ def clear_table(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    # This might be restricted to staff
-    if current_user["role"] not in ["admin", "staff"]:
+    # Match valid roles from ormModels.py
+    if current_user["role"] not in ["admin", "manager", "waiters", "employee"]:
          raise HTTPException(status_code=403, detail="Not enough permissions")
     return OrdersService.free_table(db, order_id)

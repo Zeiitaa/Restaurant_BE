@@ -9,7 +9,7 @@ from typing import List
 
 class OrdersService:
     @staticmethod
-    def create_order(db: Session, order_data: OrdersCreate, staff_id: int):
+    def create_order(db: Session, order_data: OrdersCreate, staff_id: int = None):
         # 1. Check Table 
         table = db.execute(select(Table).where(Table.id == order_data.table_id)).scalar_one_or_none()
         if not table:
