@@ -1,6 +1,6 @@
 from ormModels import Menu, menuStatus
 from app.models.Menu.menu_schema import MenuCreate, MenuDelete, MenuResponse, MenuUpdate
-
+from sqlalchemy import select
 from fastapi import HTTPException
 
 from sqlalchemy.orm import Session
@@ -9,11 +9,18 @@ from sqlalchemy.orm import Session
 def get_all_menu(db:Session):
     return db.query(Menu).all()
 
+def get_available_menus(db:Session):
+    available_menus = db.query(Menu).filter(Menu.status != menuStatus.outofstock).all()
+    return available_menus
+
 # get menu by id
-def get_menu_by_id(db:Session, id:int):
-    menu = db.query(Menu).filter(Menu.id == id).first()
+def get_menu_by_id(db:Session, id:int, lock:bool = False):
+    query = db.query(Menu).filter(Menu.id == id)
+    if lock:
+        query = query.with_for_update()
+    menu = query.first()
     if not menu:
-        raise HTTPException(status_code=404, detail="Menu not found")
+        raise HTTPException(status_code=404, detail=f"Menu with id{id} not found")
     return menu
 
 # create menu
@@ -23,15 +30,7 @@ def create_menu(db:Session, request:MenuCreate):
     if existing_menu:
         raise HTTPException(status_code=400, detail="Menu with this name already exists")
     
-    new_menu = Menu(
-        name = request.name,
-        daily_portion = request.daily_portion,
-        price = request.price,
-        status = request.status,
-        category_id =  request.category_id,
-        description = request.description,
-        image = request.image,
-    )
+    new_menu = Menu(**request.model_dump())
 
     db.add(new_menu)
     db.commit()
@@ -40,13 +39,14 @@ def create_menu(db:Session, request:MenuCreate):
 
 # update
 def update_menu(db:Session, request:MenuUpdate, id:int):
-    # check id
-    menu = get_menu_by_id(db, id)
+    # Lock the row to prevent lost updates
+    menu = get_menu_by_id(db, id, lock=True)
     
     # check jika ada menu lain dengan nama yang sama
-    if request.name:
-        check_name = db.query(Menu).filter(Menu.name == request.name, Menu.id != id).first()
-        if check_name:
+    if request.name and request.name !=menu.name:
+        query = select(Menu).where(Menu.name == request.name, Menu.id != id)
+        existing_menu = db.execute(query).scalars().first()
+        if existing_menu:
             raise HTTPException(status_code=400, detail="Another menu with this name already exists")
     
     # data yang ingin di ubah
@@ -59,9 +59,13 @@ def update_menu(db:Session, request:MenuUpdate, id:int):
     return menu
 
 def delete_menu(db:Session, id:int):    
-    menu = get_menu_by_id(db, id)
+    # Lock the row
+    menu = get_menu_by_id(db, id, lock=True)
     
     # Ganti status jadi outofstock (Soft Delete)
+    if menu.status == menuStatus.outofstock:
+        raise HTTPException(status_code=400, detail="Menu is already out of stock")
+    
     menu.status = menuStatus.outofstock
     
     db.commit()

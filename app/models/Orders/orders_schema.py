@@ -1,9 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
-
-from typing import Optional
-
+from typing import Optional, List
 from enum import Enum
-
 from datetime import datetime
 
 # ENUM
@@ -24,16 +21,27 @@ class paymentType(str, Enum):
     cash  = "cash"
     qris = "qris"
 
+# Detailed Order Schema
+class DetailedOrderBase(BaseModel):
+    menu_id: int
+    quantity: int = Field(..., gt=0)
+    notes: Optional[str] = None
+    order_type: orderType = orderType.dinein
+
+class DetailedOrderResponse(DetailedOrderBase):
+    id: int
+    subtotal: float
+    model_config = ConfigDict(from_attributes=True)
+
 # base
 class OrdersBase(BaseModel):
-    # date, staff, total amount, status itu dari service
     table_id: int = Field(..., description="Please input Table ID", examples=[1])
     customer_id: Optional[int] = Field(None, description="Please input customer ID", examples=[1])
     guest_name: Optional[str] = Field(None, description="Please input the guest name")
     method: paymentType = paymentType.cash
 
 class OrdersCreate(OrdersBase):
-    pass
+    items: List[DetailedOrderBase]
 
 # update Order
 class OrdersUpdate(BaseModel):
@@ -44,24 +52,21 @@ class OrdersUpdate(BaseModel):
 
 # update status order
 class OrdersUpdateStatus(BaseModel):
-    order_status: orderStatus
+    order_status: Optional[orderStatus] = None
+    payment_status: Optional[paymentStatus] = None
+    method: Optional[paymentType] = None
 
 # response
 class OrdersResponse(OrdersBase):
     id: int
     date: datetime
-    staff_id: int
-    order_type: orderType
+    staff_id: Optional[int] = None
     order_status: orderStatus
     payment_status: paymentStatus
     total_amount: float
+    details: List[DetailedOrderResponse]
 
     model_config = ConfigDict(from_attributes=True)
-
-#  delete (soft)
-class OrdersDelete(BaseModel):
-    id: int
-    orderStatus: orderStatus.cancelled
 
 
 
