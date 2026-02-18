@@ -68,6 +68,15 @@ class OrdersResponse(OrdersBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+class MonthlyStatsResponse(BaseModel):
+    total_orders: int
+    total_revenue: float
+
+class TopMenuResponse(BaseModel):
+    menu_id: int
+    name: str
+    total_quantity: int
+
 
 
     

@@ -1,10 +1,10 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from fastapi import HTTPException, status
-from ormModels import Orders, DetailedOrder, Menu, Table, User
+from ormModels import Orders, DetailedOrder, Menu, Table, Users
 from app.models.Orders.orders_schema import OrdersCreate, OrdersUpdate, OrdersUpdateStatus, DetailedOrderBase
 from app.models.Table.table_schema import TableStatus
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List
 
 class OrdersService:
@@ -212,3 +212,48 @@ class OrdersService:
             table.status = TableStatus.available
             db.commit()
         return {"message": f"Table {table.table_code} is now available"}
+
+    @staticmethod
+    def get_monthly_stats(db: Session):
+        one_month_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        
+        # Count total orders (all orders in the last 30 days)
+        total_orders_query = select(func.count(Orders.id)).where(Orders.date >= one_month_ago)
+        total_orders = db.execute(total_orders_query).scalar() or 0
+        
+        # Total revenue (sum of paid orders in the last 30 days)
+        total_revenue_query = select(func.sum(Orders.total_amount)).where(
+            Orders.date >= one_month_ago,
+            Orders.payment_status == "paid"
+        )
+        total_revenue = db.execute(total_revenue_query).scalar() or 0
+        
+        return {
+            "total_orders": total_orders,
+            "total_revenue": float(total_revenue)
+        }
+
+    @staticmethod
+    def get_top_menus(db: Session, limit: int = 5):
+        one_month_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        
+        query = (
+            select(
+                Menu.id,
+                Menu.name,
+                func.sum(DetailedOrder.quantity).label("total_quantity")
+            )
+            .join(DetailedOrder, Menu.id == DetailedOrder.menu_id)
+            .join(Orders, DetailedOrder.order_id == Orders.id)
+            .where(Orders.date >= one_month_ago)
+            .group_by(Menu.id, Menu.name)
+            .order_by(func.sum(DetailedOrder.quantity).desc())
+            .limit(limit)
+        )
+        
+        results = db.execute(query).all()
+        
+        return [
+            {"menu_id": row.id, "name": row.name, "total_quantity": int(row.total_quantity)}
+            for row in results
+        ]
