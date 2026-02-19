@@ -1,21 +1,20 @@
 from ormModels import Menu, menuStatus
 from app.models.Menu.menu_schema import MenuCreate, MenuDelete, MenuResponse, MenuUpdate
 from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException
-
-from sqlalchemy.orm import Session
 
 # get all
 def get_all_menu(db:Session):
-    return db.query(Menu).all()
+    return db.query(Menu).options(joinedload(Menu.category)).all()
 
 def get_available_menus(db:Session):
-    available_menus = db.query(Menu).filter(Menu.status != menuStatus.outofstock).all()
+    available_menus = db.query(Menu).options(joinedload(Menu.category)).filter(Menu.status != menuStatus.outofstock).all()
     return available_menus
 
 # get menu by id
 def get_menu_by_id(db:Session, id:int, lock:bool = False):
-    query = db.query(Menu).filter(Menu.id == id)
+    query = db.query(Menu).options(joinedload(Menu.category)).filter(Menu.id == id)
     if lock:
         query = query.with_for_update()
     menu = query.first()

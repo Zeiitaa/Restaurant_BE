@@ -67,7 +67,7 @@ class Category(base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
 
-    category = relationship("Menu", back_populates="menu")
+    menus = relationship("Menu", back_populates="category")
 
 class Menu(base):
     __tablename__ = "menu"
@@ -83,7 +83,7 @@ class Menu(base):
 
     menus = relationship("DetailedOrder", back_populates="menu")
     update = relationship("Update_stock", back_populates="menu")
-    menu = relationship("Category", back_populates="category")
+    category = relationship("Category", back_populates="menus")
 
 class Update_stock(base):
     __tablename__ = "update_stocks"

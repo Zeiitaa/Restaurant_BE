@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: 36d15ac975e0
+Revision ID: f95a268e2d51
 Revises: 
-Create Date: 2026-02-03 08:36:55.165899
+Create Date: 2026-02-19 16:24:01.926146
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '36d15ac975e0'
+revision: str = 'f95a268e2d51'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -92,20 +92,20 @@ def upgrade() -> None:
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('phone_number', sa.String(), nullable=False),
     sa.Column('address', sa.String(), nullable=False),
-    sa.ForeignKeyConstraint(['users_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['users_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('users_id')
     )
     op.create_table('detailedOrder',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('order_id', sa.Integer(), nullable=True),
+    sa.Column('order_id', sa.Integer(), nullable=False),
     sa.Column('menu_id', sa.Integer(), nullable=False),
     sa.Column('notes', sa.String(), nullable=True),
     sa.Column('quantity', sa.Integer(), nullable=False),
     sa.Column('order_type', sa.Enum('dinein', 'takeaway', name='ordertype'), nullable=False),
     sa.Column('subtotal', sa.DECIMAL(precision=10, scale=2), nullable=False),
     sa.ForeignKeyConstraint(['menu_id'], ['menu.id'], ),
-    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
+    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_detailedOrder_id'), 'detailedOrder', ['id'], unique=False)
@@ -114,7 +114,9 @@ def upgrade() -> None:
     sa.Column('menu_id', sa.Integer(), nullable=False),
     sa.Column('stock_after', sa.Integer(), nullable=False),
     sa.Column('date', sa.DateTime(), nullable=False),
+    sa.Column('users_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['menu_id'], ['menu.id'], ),
+    sa.ForeignKeyConstraint(['users_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_update_stocks_id'), 'update_stocks', ['id'], unique=False)

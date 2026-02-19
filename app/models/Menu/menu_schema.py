@@ -1,8 +1,7 @@
 from pydantic import BaseModel, Field, ConfigDict
-
 from typing import Optional
-
 from enum import Enum
+from app.models.Category.category_schema import CategoryResponse
 
 #ENUM
 class menuStatus(str, Enum):
@@ -14,7 +13,7 @@ class MenuBase(BaseModel):
     name: str = Field(..., description="Please input menu name", examples=["Nasi Goreng"])
     daily_portion: int = Field(..., description="Please input daily portion", examples=[10])
     price: int = Field(..., description="Please Input Price Menu", examples=[15000])
-    status: menuStatus = Field(..., description="Current Menu Status", examples=["Pending"])
+    status: menuStatus = Field(..., description="Current Menu Status", examples=["available"])
     category_id: int = Field(..., description="Category ID", examples=[1])
     description: str = Field(..., description="Input Menu Description", examples=["Fried Rice, Eggs, Shredded Chicken"])
     image: str = Field(..., description="Please input Image URL", examples=["https://i.pinimg.com/736x/8e/af/ae/8eafae4853808152081ad876648522da.jpg"])
@@ -35,7 +34,8 @@ class MenuUpdate(BaseModel):
 
 # Response
 class MenuResponse(MenuBase):
-    id:int
+    id: int
+    category: Optional[CategoryResponse] = None
     model_config = ConfigDict(from_attributes=True)
 
 # Delete
