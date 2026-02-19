@@ -27,10 +27,15 @@ class UserCreate(UserBase):
     password: str = Field(..., description="Please input your password")
 
 class UserUpdate(BaseModel):
+    # User fields
     username: Optional[str] = None
     password: Optional[str] = None
     status: Optional[UserStatus] = None
     role: Optional[UserRole] = None
+    # UserDetail fields
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
 
 class UserDeact(BaseModel):
     status: Optional[UserStatus] = None

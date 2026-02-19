@@ -14,12 +14,15 @@ def get_available_menus(db:Session):
 
 # get menu by id
 def get_menu_by_id(db:Session, id:int, lock:bool = False):
-    query = db.query(Menu).options(joinedload(Menu.category)).filter(Menu.id == id)
     if lock:
-        query = query.with_for_update()
-    menu = query.first()
+        # Separate query for locking without eager loading to avoid join issues with FOR UPDATE
+        menu = db.query(Menu).filter(Menu.id == id).with_for_update().first()
+    else:
+        # Standard query with eager loading for read operations
+        menu = db.query(Menu).options(joinedload(Menu.category)).filter(Menu.id == id).first()
+        
     if not menu:
-        raise HTTPException(status_code=404, detail=f"Menu with id{id} not found")
+        raise HTTPException(status_code=404, detail=f"Menu with id {id} not found")
     return menu
 
 # create menu
