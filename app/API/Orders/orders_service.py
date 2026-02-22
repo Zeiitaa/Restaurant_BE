@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, update, func
 from fastapi import HTTPException, status
-from ormModels import Orders, DetailedOrder, Menu, Table, Users
+from ormModels import Orders, DetailedOrder, Menu, Table, Users, paymentStatus, orderStatus
 from app.models.Orders.orders_schema import OrdersCreate, OrdersUpdate, OrdersUpdateStatus, DetailedOrderBase
 from app.models.Table.table_schema import TableStatus
 from datetime import datetime, timezone, timedelta
@@ -57,6 +57,7 @@ class OrdersService:
             ))
 
         # 3. Create Order
+        discount = float(order_data.discount or 0)
         new_order = Orders(
             table_id=order_data.table_id,
             customer_id=order_data.customer_id,
@@ -64,6 +65,7 @@ class OrdersService:
             staff_id=staff_id,
             date=datetime.now(timezone.utc),
             total_amount=total_amount,
+            discount=discount,
             method=order_data.method,
             order_status="preparing",
             payment_status="unpaid"
@@ -87,13 +89,25 @@ class OrdersService:
         return db.execute(
             select(Orders)
             .where(Orders.id == new_order.id)
-            .options(joinedload(Orders.details))
+            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
         ).unique().scalar_one()
 
     @staticmethod
     def get_all_orders(db: Session):
         return db.execute(
-            select(Orders).options(joinedload(Orders.details))
+            select(Orders).options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
+        ).unique().scalars().all()
+
+    @staticmethod
+    def get_served_orders(db: Session):
+        """Returns orders that are served but not yet paid (ready for payment processing)."""
+        return db.execute(
+            select(Orders)
+            .where(
+                Orders.order_status == orderStatus.served,
+                Orders.payment_status == paymentStatus.unpaid
+            )
+            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
         ).unique().scalars().all()
 
     @staticmethod
@@ -101,7 +115,7 @@ class OrdersService:
         order = db.execute(
             select(Orders)
             .where(Orders.id == order_id)
-            .options(joinedload(Orders.details))
+            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
         ).unique().scalar_one_or_none()
         
         if not order:
@@ -124,9 +138,25 @@ class OrdersService:
         if status_data.method:
             order.method = status_data.method
         
+        if status_data.amount_paid is not None:
+            final_amount = float(order.total_amount) - float(order.discount or 0)
+            if status_data.amount_paid < final_amount:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Amount paid ({status_data.amount_paid}) is less than the bill ({final_amount})"
+                )
+            order.amount_paid = status_data.amount_paid
+            order.change_amount = round(status_data.amount_paid - final_amount, 2)
+
         if status_data.payment_status:
             # Logika Otomatis: Jika status berubah jadi 'paid', bebaskan meja
             if status_data.payment_status == "paid" and order.payment_status != "paid":
+                # Validasi amount_paid sudah diisi sebelum mark paid
+                if order.amount_paid is None and status_data.amount_paid is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Please provide amount_paid before marking order as paid"
+                    )
                 table = db.execute(select(Table).where(Table.id == order.table_id)).scalar_one_or_none()
                 if table:
                     table.status = TableStatus.available
@@ -198,7 +228,7 @@ class OrdersService:
         return db.execute(
             select(Orders)
             .where(Orders.id == order.id)
-            .options(joinedload(Orders.details))
+            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
         ).unique().scalar_one()
 
     @staticmethod
@@ -215,8 +245,11 @@ class OrdersService:
 
     @staticmethod
     def get_monthly_stats(db: Session):
-        one_month_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        now = datetime.now(timezone.utc)
+        one_month_ago = now - timedelta(days=30)
+        two_months_ago = now - timedelta(days=60)
         
+        # --- Current Period (Last 30 days) ---
         # Count total orders (all orders in the last 30 days)
         total_orders_query = select(func.count(Orders.id)).where(Orders.date >= one_month_ago)
         total_orders = db.execute(total_orders_query).scalar() or 0
@@ -224,13 +257,39 @@ class OrdersService:
         # Total revenue (sum of paid orders in the last 30 days)
         total_revenue_query = select(func.sum(Orders.total_amount)).where(
             Orders.date >= one_month_ago,
-            Orders.payment_status == "paid"
+            Orders.payment_status == paymentStatus.paid
         )
         total_revenue = db.execute(total_revenue_query).scalar() or 0
         
+        # --- Previous Period (30-60 days ago) ---
+        prev_orders_query = select(func.count(Orders.id)).where(
+            Orders.date >= two_months_ago,
+            Orders.date < one_month_ago
+        )
+        prev_orders = db.execute(prev_orders_query).scalar() or 0
+        
+        prev_revenue_query = select(func.sum(Orders.total_amount)).where(
+            Orders.date >= two_months_ago,
+            Orders.date < one_month_ago,
+            Orders.payment_status == paymentStatus.paid
+        )
+        prev_revenue = db.execute(prev_revenue_query).scalar() or 0
+
+        # --- Percentage Calculation ---
+        def calculate_percentage_change(current, previous):
+            if previous == 0:
+                return 100.0 if current > 0 else 0.0
+            diff = current - previous
+            return (diff / previous) * 100
+
+        orders_change = calculate_percentage_change(total_orders, prev_orders)
+        revenue_change = calculate_percentage_change(float(total_revenue), float(prev_revenue))
+        
         return {
             "total_orders": total_orders,
-            "total_revenue": float(total_revenue)
+            "total_revenue": float(total_revenue),
+            "total_orders_change": orders_change,
+            "total_revenue_change": revenue_change
         }
 
     @staticmethod
