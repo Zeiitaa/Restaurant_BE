@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.core.deps import get_db
 from app.core.auth import get_current_user
@@ -13,13 +13,20 @@ from dotenv import load_dotenv
 import midtransclient
 import time
 
+load_dotenv()
+
 # --- SETUP MIDTRANS CORE API ---
 # Taruh Server Key di sini (Biarin is_production=False karena kita pakai Sandbox)
 # NOTE: Replace 'YOUR_SERVER_KEY' and 'YOUR_CLIENT_KEY' with your actual Midtrans keys during development or load from env
+# Strip any surrounding quotes or whitespace from the keys
+
+server_key = os.getenv("MIDTRANS_SERVER_KEY", "").strip()
+client_key = os.getenv("MIDTRANS_CLIENT_KEY", "").strip()
+
 core_api = midtransclient.CoreApi(
     is_production=False,
-    server_key=os.getenv("MIDTRANS_SERVER_KEY", "YOUR_SERVER_KEY"), 
-    client_key=os.getenv("MIDTRANS_CLIENT_KEY", "YOUR_CLIENT_KEY")  
+    server_key=server_key, 
+    client_key=client_key  
 )
 
 
@@ -137,54 +144,45 @@ def clear_table(
 def generate_qris(
     order_id: int,
     db: Session = Depends(get_db),
-    # Optional: require auth or allow public payment link generation?
-    # User didn't specify auth, but usually payment generation might be open or protected.
-    # Given the previous endpoints have auth, I'll stick to optional auth or no auth.
-    # The requirement says "Create a new endpoint: ..." and implies standard access.
-    # I'll include db dependency.
 ):
     try:
         # 1. Query Order
-        # Note: Orders is imported from ormModels
         order = db.query(Orders).filter(Orders.id == order_id).first()
         
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
         
         # 2. Check Payment Status
-        # paymentStatus is imported from ormModels. 
-        # Using string comparison directly or enum if loaded correctly.
-        # Check if attribute returns enum member or value. SQLAlchemy typically returns Enum member.
-        if order.payment_status == paymentStatus.paid or order.payment_status == "paid":
+        if order.payment_status == paymentStatus.paid or str(order.payment_status) == "paid":
              raise HTTPException(status_code=400, detail="Order is already paid")
              
         # 3. Generate Unique Midtrans Order ID
-        # Format: ORDER-{order_id}-{timestamp}
         timestamp = int(time.time())
         midtrans_order_id = f"ORDER-{order_id}-{timestamp}"
         
         # 4. Prepare Payload
-        # Guest name: defaults to "Guest" if None
         customer_name = order.guest_name if order.guest_name else "Guest"
         
+        # Ensure gross_amount is int and > 0
+        gross_amount = int(order.total_amount)
+        if gross_amount <= 0:
+            raise HTTPException(status_code=400, detail="Total amount must be greater than 0")
+
         payload = {
             "payment_type": "gopay",
             "transaction_details": {
                 "order_id": midtrans_order_id,
-                "gross_amount": int(order.total_amount) # Ensure integer
+                "gross_amount": gross_amount
             },
             "customer_details": {
                 "first_name": customer_name
-            },
-            # Optional: Add Item Details if needed, but requirements didn't specify
+            }
         }
-
+        
         # 5. Execute Charge
-        # core_api is defined globally in this file
         charge_response = core_api.charge(payload)
         
         # 6. Parse Response for QR Code URL
-        # Midtrans Core API response for GoPay/QRIS usually contains 'actions'
         qr_image_url = None
         actions = charge_response.get("actions", [])
         for action in actions:
@@ -193,12 +191,10 @@ def generate_qris(
                 break
                 
         if not qr_image_url:
-            # Fallback or specific error if QR code not found in response
-            # Sometimes 'qr_code_url' is directly in body for some payment types, 
-            # but for purely "gopay" -> "qris", 'actions' is the standard way.
-            # We can also check if charge_response has 'qr_string' or similar if needed.
-            # For now, strict adherence to requirements (look inside 'actions').
-            pass
+            raise HTTPException(
+                status_code=500, 
+                detail="Gagal mendapatkan URL QRIS dari respon Midtrans. Pastikan metode pembayaran aktif."
+            )
 
         # 7. Return JSON Response
         return {
@@ -207,12 +203,12 @@ def generate_qris(
             "midtrans_order_id": midtrans_order_id,
             "total_amount": int(order.total_amount),
             "qr_image_url": qr_image_url,
-            "midtrans_response": charge_response # Optional: include full response for debug/client
+            "midtrans_response": charge_response 
         }
 
+    except midtransclient.error_midtrans.MidtransAPIError as e:
+        raise HTTPException(status_code=500, detail=f"Midtrans API Error: {e.message}")
     except HTTPException as he:
         raise he
     except Exception as e:
-        # 8. Raise 500 on Midtrans failure
-        # In production, log the error 'e'
-        raise HTTPException(status_code=500, detail=f"Midtrans Payment Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")

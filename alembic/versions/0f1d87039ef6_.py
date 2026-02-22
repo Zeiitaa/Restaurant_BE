@@ -1,8 +1,8 @@
 """empty message
 
-Revision ID: f95a268e2d51
+Revision ID: 0f1d87039ef6
 Revises: 
-Create Date: 2026-02-19 16:24:01.926146
+Create Date: 2026-02-22 21:48:40.156485
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'f95a268e2d51'
+revision: str = '0f1d87039ef6'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -66,6 +66,9 @@ def upgrade() -> None:
     sa.Column('staff_id', sa.Integer(), nullable=True),
     sa.Column('guest_name', sa.String(), nullable=True),
     sa.Column('total_amount', sa.DECIMAL(precision=10, scale=2), nullable=False),
+    sa.Column('discount', sa.DECIMAL(precision=10, scale=2), nullable=False),
+    sa.Column('amount_paid', sa.DECIMAL(precision=10, scale=2), nullable=True),
+    sa.Column('change_amount', sa.DECIMAL(precision=10, scale=2), nullable=True),
     sa.Column('method', sa.Enum('cash', 'qris', name='paymenttype'), nullable=False),
     sa.Column('payment_status', sa.Enum('unpaid', 'paid', name='paymentstatus'), nullable=False),
     sa.Column('order_status', sa.Enum('preparing', 'served', 'cancelled', name='orderstatus'), nullable=False),
