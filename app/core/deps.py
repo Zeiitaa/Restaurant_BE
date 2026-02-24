@@ -1,8 +1,8 @@
 # berisikan fungsi untuk mengambil sesi database
-from app.core.database import SessionLocal
+from database import sessionLocal
 
 def get_db():
-    db = SessionLocal()
+    db = sessionLocal()
     try:
         yield db
     finally:

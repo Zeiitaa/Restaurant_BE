@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from app.core.deps import get_db
+from database import getDB
 from app.API.auth import auth_service
 from app.core.auth import Token
 from fastapi.security import OAuth2PasswordRequestForm
-from app.core.auth import get_current_staff, require_role
-from app.models.Staff.staff_schema import staffResponse 
-from ormModels import Staff
+from app.core.auth import get_current_user, require_role
+from app.models.User.user_schema import UserResponse, UserRegister, UserDetailCreateBase, UserDetailResponse
+from ormModels import Users
 from pydantic import BaseModel
+import database
 
 class LoginRequest(BaseModel):
     username: str
@@ -16,9 +17,13 @@ class LoginRequest(BaseModel):
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=Token)
-def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    return auth_service.login_staff(db, form_data.username, form_data.password)
+def login_endpoint(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(getDB)):
+    return auth_service.login_user(db, form_data.username, form_data.password)
 
-@router.get("/profile", response_model=staffResponse)
-def get_profile(current_user: Staff = Depends(get_current_staff)):
-    return current_user
+@router.post("/register", response_model=UserResponse)
+def regist_endpoint(request:UserRegister, db:Session = Depends(database.getDB)):
+    return auth_service.register_user(db, request)
+
+@router.post("/register-detail", response_model=UserDetailResponse)
+def regist_detail_endpoint(request:UserDetailCreateBase, db:Session = Depends(database.getDB), current_user:Users = Depends(get_current_user)):
+    return auth_service.register_detail_user(db, request, current_user.id)

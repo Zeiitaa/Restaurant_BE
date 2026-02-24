@@ -1,8 +1,12 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+import os
+from dotenv import load_dotenv
+
 
 # Link DataBase
-DATABASE_URL = "postgresql://postgres.unjvothanayxvqkyafvy:XbRZpVTkIJEp93BX@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # membuat engine dengan link database
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)

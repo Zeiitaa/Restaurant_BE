@@ -4,12 +4,12 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status, APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-from ormModels import Staff
+from ormModels import Users
 from sqlalchemy.orm import Session
 from app.core.deps import get_db
 from dotenv import load_dotenv
 import os
-from ormModels import staffRole
+from ormModels import UserRole
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -25,7 +25,7 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     """Isi token setelah di-decode"""
-    sub: Optional[str] = None   # staff_id 
+    sub: Optional[str] = None   # user_id 
     username: Optional[str] = None # username
     role: Optional[str] = None  # anggota/petugas
     exp: Optional[int] = None   # expiry time
@@ -53,23 +53,28 @@ def verify_access_token(token: str = Depends(oauth2_scheme)) -> TokenPayload:
                                           )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        staff_id: str = payload.get("sub")
+        user_id: str = payload.get("sub")
         role: str = payload.get("role")
-        if staff_id is None or role is None:
+        if user_id is None:
             raise credentials_exception
         
-        return TokenPayload(sub=staff_id, role=role, exp=payload.get("exp"))
+        return TokenPayload(
+            sub=user_id, 
+            role=role, # Bisa None jika tidak ada
+            username=payload.get("username"),
+            exp=payload.get("exp")
+        )
     except JWTError:
         raise credentials_exception
     
     """ ================= ROLE CHECK DEPENDENCY ================= """
-def require_role(*allowed_roles: staffRole):
+def require_role(*allowed_role: UserRole):
     """
     Dependency reusable untuk membatasi akses endpoint berdasarkan role.
     """
-    def dependency(current_user: Staff = Depends(get_current_staff)):
-        if current_user.role not in allowed_roles:
-            allowed = ', '.join([role.value for role in allowed_roles])
+    def dependency(current_user: Users = Depends(get_current_user)):
+        if current_user.role not in allowed_role:
+            allowed = ', '.join([role.value for role in allowed_role])
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Your role doesn't allow this action. Required role: {allowed}"
@@ -80,19 +85,19 @@ def require_role(*allowed_roles: staffRole):
 
 """ ================= OPTIONAL HELPER ================= """
 """ Mengambil user yang sedang login universal"""
-def get_current_staff(
+def get_current_user(
     db: Session = Depends(get_db),
     token_data: TokenPayload = Depends(verify_access_token),
 ):
     try:
-        staff_id = int(token_data.sub)
+        user_id = int(token_data.sub)
     except (TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token subject"
         )
 
-    user = db.query(Staff).filter(Staff.id == staff_id).first()
+    user = db.query(Users).filter(Users.id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
