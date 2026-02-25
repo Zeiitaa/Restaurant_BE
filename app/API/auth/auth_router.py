@@ -5,7 +5,7 @@ from app.API.auth import auth_service
 from app.core.auth import Token
 from fastapi.security import OAuth2PasswordRequestForm
 from app.core.auth import get_current_user, require_role
-from app.models.User.user_schema import UserResponse, UserRegister, UserDetailCreateBase, UserDetailResponse, ForgotPassword, ResetPassword
+from app.models.User.user_schema import UserResponse, UserRegister, UserDetailCreateBase, UserDetailResponse, ForgotPassword, ResetPassword, VerifyOTP
 from ormModels import Users
 from pydantic import BaseModel
 import database
@@ -31,6 +31,10 @@ def regist_detail_endpoint(request:UserDetailCreateBase, db:Session = Depends(da
 @router.post("/forgot-password")
 def forgot_password_endpoint(request: ForgotPassword, db: Session = Depends(database.getDB)):
     return auth_service.forgot_password(db, request)
+
+@router.post("/verify-otp")
+def verify_otp_endpoint(request: auth_service.VerifyOTP, db: Session = Depends(database.getDB)):
+    return auth_service.verify_otp(db, request)
 
 @router.post("/reset-password")
 def reset_password_endpoint(request: ResetPassword, db: Session = Depends(database.getDB)):

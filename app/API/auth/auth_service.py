@@ -4,10 +4,11 @@ from fastapi import HTTPException, status
 from ormModels import Users, UserDetails, UserRole, UserStatus
 from app.core.auth import create_access_token, Token
 from app.core.security import verify_password, hash_password
-from app.models.User.user_schema import UserRegister, UserDetailCreateBase, ForgotPassword, ResetPassword
+from app.models.User.user_schema import UserRegister, UserDetailCreateBase, ForgotPassword, ResetPassword, VerifyOTP
 import random
 import string
 from datetime import datetime, timedelta, timezone
+from jose import jwt, JWTError
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -145,7 +146,7 @@ def forgot_password(db: Session, request: ForgotPassword):
     
     return {"message": "OTP sent to your email"}
 
-def reset_password(db: Session, request: ResetPassword):
+def verify_otp(db: Session, request: VerifyOTP):
     user = db.query(Users).filter(Users.email == request.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -154,10 +155,8 @@ def reset_password(db: Session, request: ResetPassword):
     if user.otp_code != request.otp_code:
         raise HTTPException(status_code=400, detail="Invalid OTP")
         
-    # Check expiry properly
+    # Check expiry
     now_utc = datetime.now(timezone.utc)
-    
-    # Ensure expiry is timezone aware if it isn't
     expiry = user.otp_expires_at
     if expiry.tzinfo is None:
         expiry = expiry.replace(tzinfo=timezone.utc)
@@ -165,13 +164,41 @@ def reset_password(db: Session, request: ResetPassword):
     if now_utc > expiry:
         raise HTTPException(status_code=400, detail="OTP has expired")
     
-    # Update Password
-    user.password = hash_password(request.new_password)
+    # OTP Valid, Generate Temporary Reset Token (5 minutes valid)
+    reset_token = create_access_token(
+        subject=str(user.id),
+        expires_delta=timedelta(minutes=5),
+        extra={"purpose": "reset_password"}
+    )
     
-    # Clear OTP
+    # Optional: Clear OTP immediately or wait until password reset
+    # Keeping OTP until reset or expiry is fine, but clearing prevents replays if we wanted to enforce strict one-time use
+    # For now, we rely on the short-lived token.
     user.otp_code = None
     user.otp_expires_at = None
+    db.commit()
     
+    return {"message": "OTP verified", "reset_token": reset_token}
+
+def reset_password(db: Session, request: ResetPassword):
+    try:
+        # Decode token manually or use a dependency if available, but here we do it manually to check 'purpose'
+        payload = jwt.decode(request.reset_token, os.getenv("SECRET_KEY"), algorithms=[os.getenv("ALGORITHM")])
+        user_id = payload.get("sub")
+        purpose = payload.get("purpose")
+        
+        if user_id is None or purpose != "reset_password":
+            raise HTTPException(status_code=401, detail="Invalid reset token")
+            
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired reset token")
+        
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update Password
+    user.password = hash_password(request.new_password)
     db.commit()
     
     return {"message": "Password has been reset successfully"}
