@@ -28,6 +28,7 @@ class TokenPayload(BaseModel):
     sub: Optional[str] = None   # user_id 
     username: Optional[str] = None # username
     role: Optional[str] = None  # anggota/petugas
+    purpose: Optional[str] = None # purpose of token (e.g., 'access', 'reset_password')
     exp: Optional[int] = None   # expiry time
     
     

@@ -54,9 +54,12 @@ class UserRegister(BaseModel):
 class ForgotPassword(BaseModel):
     email: str = Field(..., description="Please input your email", examples=["user@example.com"])
 
-class ResetPassword(BaseModel):
+class VerifyOTP(BaseModel):
     email: str = Field(..., description="Please input your email", examples=["user@example.com"])
     otp_code: str = Field(..., description="Please input the OTP code you received",  min_length=6, max_length=6)
+
+class ResetPassword(BaseModel):
+    reset_token: str = Field(..., description="The temporary token received after verifying OTP")
     new_password: str = Field(..., description="Please input your new password")
 
 class UserDetailCreateBase(BaseModel):
