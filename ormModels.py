@@ -101,7 +101,8 @@ class Users(base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, nullable=False)
+    username = Column(String, nullable=False, unique=True)
+    email = Column(String, nullable=True, unique=True)
     password = Column(String, nullable=False)
     status = Column(Enum(UserStatus), nullable=False, default=UserStatus.active)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.customer)
