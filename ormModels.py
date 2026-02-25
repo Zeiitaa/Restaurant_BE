@@ -106,6 +106,8 @@ class Users(base):
     password = Column(String, nullable=False)
     status = Column(Enum(UserStatus), nullable=False, default=UserStatus.active)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.customer)
+    otp_code = Column(String, nullable=True)
+    otp_expires_at = Column(DateTime, nullable=True)
 
     user_detail = relationship("UserDetails", back_populates="users", uselist=False)
     staff_detail = relationship("StaffDetails", back_populates="users", uselist=False)

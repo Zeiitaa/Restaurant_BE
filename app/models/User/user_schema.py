@@ -41,13 +41,23 @@ class UserDeact(BaseModel):
     status: Optional[UserStatus] = None
 
 class UserResponse(UserBase):
+    email: Optional[str] = None
     id: int
     model_config = ConfigDict(from_attributes=True)
 
 class UserRegister(BaseModel):
     username: str = Field(..., description="Please input your username", examples=["Zeita"])
+    email: str = Field(..., description="Please input your email", examples=["user@example.com"])
     password: str = Field(..., description="Please input your password")
     confirm_password: str = Field(..., description="Please confirm your password")
+
+class ForgotPassword(BaseModel):
+    email: str = Field(..., description="Please input your email", examples=["user@example.com"])
+
+class ResetPassword(BaseModel):
+    email: str = Field(..., description="Please input your email", examples=["user@example.com"])
+    otp_code: str = Field(..., description="Please input the OTP code you received",  min_length=6, max_length=6)
+    new_password: str = Field(..., description="Please input your new password")
 
 class UserDetailCreateBase(BaseModel):
     name: str = Field(..., description="Please input your name", examples=["Andhika"])
