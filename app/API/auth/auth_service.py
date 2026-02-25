@@ -1,13 +1,28 @@
 ﻿from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from fastapi import HTTPException, status
 from ormModels import Users, UserDetails, UserRole, UserStatus
 from app.core.auth import create_access_token, Token
 from app.core.security import verify_password, hash_password
-from app.models.User.user_schema import UserRegister, UserDetailCreateBase
+from app.models.User.user_schema import UserRegister, UserDetailCreateBase, ForgotPassword, ResetPassword
+import random
+import string
+from datetime import datetime, timedelta, timezone
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
 
 def authenticate_user(db: Session, username: str, password: str) -> Users:
-    """Authenticate User by username and Password."""
-    user = db.query(Users).filter(Users.username == username).first()
+    """Authenticate User by username/email and Password."""
+    # Check by username OR email
+    user = db.query(Users).filter(
+        or_(
+            Users.username == username,
+            Users.email == username
+        )
+    ).first()
+    
     if not user or not verify_password(password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
@@ -33,12 +48,18 @@ def login_user(db: Session, username: str, password: str) -> Token:
 
 # Register User
 def register_user(db:Session, request: UserRegister):
-    # Cek apakah username sudah ada
-    existing_user = db.query(Users).filter(Users.username == request.username).first()
+    # Cek apakah username atau email sudah ada
+    existing_user = db.query(Users).filter(
+        or_(
+            Users.username == request.username,
+            Users.email == request.email
+        )
+    ).first()
+    
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already exists"
+            detail="Username or Email already exists"
         )
     
     # cek apakah password sama dengan confirm password
@@ -48,6 +69,7 @@ def register_user(db:Session, request: UserRegister):
     # buat data user baru
     new_User = Users(
         username = request.username,
+        email = request.email,
         password = hash_password(request.password),
         status = UserStatus.active,
         role = UserRole.customer
@@ -68,3 +90,88 @@ def register_detail_user(db:Session, request:UserDetailCreateBase, user_id:int):
     db.commit()
     db.refresh(new_detail_user)
     return new_detail_user
+
+# --- Forgot Password Logic ---
+
+def send_email(to_email: str, subject: str, body: str):
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = int(os.getenv("SMTP_PORT"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+
+    if not smtp_user or not smtp_password:
+        print(f"Warning: SMTP credentials not set. OTP for {to_email}: {body}")
+        # In production, you might want to log this or handle it differently
+        return 
+
+    msg = MIMEMultipart()
+    msg['From'] = smtp_user
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        text = msg.as_string()
+        server.sendmail(smtp_user, to_email, text)
+        server.quit()
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send OTP email")
+
+
+def forgot_password(db: Session, request: ForgotPassword):
+    user = db.query(Users).filter(Users.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found")
+    
+    # Generate 6-digit OTP
+    otp = ''.join(random.choices(string.digits, k=6))
+    
+    # Set expiration time (e.g., 5 minutes from now)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    
+    # Update user with OTP
+    user.otp_code = otp
+    user.otp_expires_at = expires_at
+    db.commit()
+    
+    # Send Email
+    subject = "Password Reset OTP"
+    body = f"Your OTP for password reset is: {otp}. It expires in 5 minutes."
+    send_email(user.email, subject, body)
+    
+    return {"message": "OTP sent to your email"}
+
+def reset_password(db: Session, request: ResetPassword):
+    user = db.query(Users).filter(Users.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found")
+        
+    # Validate OTP
+    if user.otp_code != request.otp_code:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+        
+    # Check expiry properly
+    now_utc = datetime.now(timezone.utc)
+    
+    # Ensure expiry is timezone aware if it isn't
+    expiry = user.otp_expires_at
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+        
+    if now_utc > expiry:
+        raise HTTPException(status_code=400, detail="OTP has expired")
+    
+    # Update Password
+    user.password = hash_password(request.new_password)
+    
+    # Clear OTP
+    user.otp_code = None
+    user.otp_expires_at = None
+    
+    db.commit()
+    
+    return {"message": "Password has been reset successfully"}
