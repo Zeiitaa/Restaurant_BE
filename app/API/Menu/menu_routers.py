@@ -13,6 +13,10 @@ router = APIRouter(prefix="/menu", tags=["menu"])
 def get_all_menu(db: Session = Depends(getDB)):
     return menu_service.get_all_menu(db)
 
+@router.get("/available", response_model=list[MenuResponse])
+def get_available_menus(db: Session = Depends(getDB)):
+    return menu_service.get_available_menus(db)
+
 # get by id
 @router.get("/{id}", response_model=MenuResponse)
 def get_menu_by_id(id: int, db: Session = Depends(getDB)):
