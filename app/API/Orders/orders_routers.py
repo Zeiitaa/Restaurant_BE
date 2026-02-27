@@ -98,6 +98,10 @@ def get_top_menus(
          raise HTTPException(status_code=403, detail="Not enough permissions to view statistics")
     return OrdersService.get_top_menus(db, limit=limit)
 
+@router.get("/preparing", response_model=List[OrdersResponse])
+def get_preparing_orders(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    return OrdersService.get_preparing_orders(db)
+
 @router.get("/served", response_model=List[OrdersResponse])
 def get_served_orders(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     return OrdersService.get_served_orders(db)
@@ -113,7 +117,14 @@ def update_order_status(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    return OrdersService.update_order_status(db, order_id, status_data)
+    # Catat ID staff/kasir yang melakukan update
+    current_staff_id = current_user.id if hasattr(current_user, "id") else None
+    return OrdersService.update_order_status(
+        db=db, 
+        order_id=order_id, 
+        status_data=status_data, 
+        current_staff_id=current_staff_id
+    )
 
 @router.post("/{order_id}/items", response_model=OrdersResponse)
 def add_items_to_order(

@@ -7,7 +7,6 @@ from database import base
 import enum
 
 from datetime import datetime, timezone
-
 # Declare Enum
 class tableStatus(enum.Enum):
     available = "available"

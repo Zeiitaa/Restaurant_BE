@@ -29,6 +29,12 @@ class MenuSimpleResponse(BaseModel):
     image: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
+# Simplified User Schema for Order Response
+class UserSimpleResponse(BaseModel):
+    id: int
+    username: str
+    model_config = ConfigDict(from_attributes=True)
+
 # Detailed Order Schema
 class DetailedOrderBase(BaseModel):
     menu_id: int
@@ -52,7 +58,7 @@ class OrdersBase(BaseModel):
 
 class OrdersCreate(OrdersBase):
     items: List[DetailedOrderBase]
-    discount: Optional[float] = Field(0.0, ge=0, description="Discount amount (not percentage)")
+    discount: Optional[float] = Field(0.0, ge=0, le=100, description="Discount percentage (0-100%)")
 
 # update Order
 class OrdersUpdate(BaseModel):
@@ -67,13 +73,15 @@ class OrdersUpdateStatus(BaseModel):
     order_status: Optional[orderStatus] = None
     payment_status: Optional[paymentStatus] = None
     method: Optional[paymentType] = None
+    discount: Optional[float] = Field(None, ge=0, le=100, description="Update discount percentage")
     amount_paid: Optional[float] = Field(None, ge=0, description="Amount paid by the customer")
 
 # response
 class OrdersResponse(OrdersBase):
     id: int
     date: datetime
-    staff_id: Optional[int] = None
+    staff: Optional[UserSimpleResponse] = None
+    customer: Optional[UserSimpleResponse] = None
     order_status: orderStatus
     payment_status: paymentStatus
     total_amount: float

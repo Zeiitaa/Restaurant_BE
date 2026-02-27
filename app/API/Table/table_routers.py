@@ -44,7 +44,7 @@ def update_table(
     code: int, 
     request: TableUpdate, 
     db: Session = Depends(getDB), 
-    current_user: Users = Depends(require_role(UserRole.admin, UserRole.manager))
+    current_user: Users = Depends(require_role(UserRole.admin, UserRole.manager, UserRole.waiters))
 ):
     print(f"LOG: User {current_user.username} (ID: {current_user.id}) is updating table code {code}")
     return table_service.update_table(code, db, request)

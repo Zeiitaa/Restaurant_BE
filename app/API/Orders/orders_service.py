@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select, update, func
 from fastapi import HTTPException, status
-from ormModels import Orders, DetailedOrder, Menu, Table, Users, paymentStatus, orderStatus
+from ormModels import Orders, DetailedOrder, Menu, Table, Users, paymentStatus, orderStatus, menuStatus
 from app.models.Orders.orders_schema import OrdersCreate, OrdersUpdate, OrdersUpdateStatus, DetailedOrderBase
 from app.models.Table.table_schema import TableStatus
 from datetime import datetime, timezone, timedelta
@@ -31,10 +31,12 @@ class OrdersService:
             if not menu_item:
                 raise HTTPException(status_code=404, detail=f"Menu item {item.menu_id} not found")
             
-            if menu_item.status == "outOfStock":
+            # Use value if it's an enum
+            menu_item_status = menu_item.status.value if hasattr(menu_item.status, "value") else menu_item.status
+            if menu_item_status == "outOfStock":
                 raise HTTPException(status_code=400, detail=f"Menu {menu_item.name} is out of stock")
 
-            if menu_item.daily_portion < item.quantity:
+            if float(menu_item.daily_portion) < item.quantity:
                 raise HTTPException(
                     status_code=400, 
                     detail=f"Not enough stock for {menu_item.name}. Remaining: {menu_item.daily_portion}"
@@ -42,10 +44,10 @@ class OrdersService:
 
             # Deduct stock
             menu_item.daily_portion -= item.quantity
-            if menu_item.daily_portion == 0:
-                menu_item.status = "outOfStock"
+            if float(menu_item.daily_portion) <= 0:
+                menu_item.status = menuStatus.outofstock
 
-            subtotal = menu_item.price * item.quantity
+            subtotal = float(menu_item.price) * item.quantity
             total_amount += subtotal
 
             detailed_orders.append(DetailedOrder(
@@ -57,15 +59,20 @@ class OrdersService:
             ))
 
         # 3. Create Order
-        discount = float(order_data.discount or 0)
+        discount_percent = float(order_data.discount or 0)
+        # Hitung diskon dulu baru pajak 10%: (Subtotal * (1 - Discount%)) * 1.1
+        subtotal = float(total_amount)
+        discounted_amount = subtotal * (1 - (discount_percent / 100))
+        final_total = round(discounted_amount * 1.1, 2)
+        
         new_order = Orders(
             table_id=order_data.table_id,
             customer_id=order_data.customer_id,
             guest_name=order_data.guest_name,
             staff_id=staff_id,
             date=datetime.now(timezone.utc),
-            total_amount=total_amount,
-            discount=discount,
+            total_amount=final_total,
+            discount=discount_percent,
             method=order_data.method,
             order_status="preparing",
             payment_status="unpaid"
@@ -89,13 +96,37 @@ class OrdersService:
         return db.execute(
             select(Orders)
             .where(Orders.id == new_order.id)
-            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
+            .options(
+                joinedload(Orders.details).joinedload(DetailedOrder.menu),
+                joinedload(Orders.staff),
+                joinedload(Orders.customer)
+            )
         ).unique().scalar_one()
 
     @staticmethod
     def get_all_orders(db: Session):
         return db.execute(
-            select(Orders).options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
+            select(Orders).options(
+                joinedload(Orders.details).joinedload(DetailedOrder.menu),
+                joinedload(Orders.staff),
+                joinedload(Orders.customer)
+            )
+        ).unique().scalars().all()
+
+    @staticmethod
+    def get_preparing_orders(db: Session):
+        """Returns orders that are preparing but not yet served."""
+        return db.execute(
+            select(Orders)
+            .where(
+                Orders.order_status == orderStatus.preparing,
+                Orders.payment_status == paymentStatus.unpaid
+            )
+            .options(
+                joinedload(Orders.details).joinedload(DetailedOrder.menu),
+                joinedload(Orders.staff),
+                joinedload(Orders.customer)
+            )
         ).unique().scalars().all()
 
     @staticmethod
@@ -107,7 +138,11 @@ class OrdersService:
                 Orders.order_status == orderStatus.served,
                 Orders.payment_status == paymentStatus.unpaid
             )
-            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
+            .options(
+                joinedload(Orders.details).joinedload(DetailedOrder.menu),
+                joinedload(Orders.staff),
+                joinedload(Orders.customer)
+            )
         ).unique().scalars().all()
 
     @staticmethod
@@ -115,7 +150,11 @@ class OrdersService:
         order = db.execute(
             select(Orders)
             .where(Orders.id == order_id)
-            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
+            .options(
+                joinedload(Orders.details).joinedload(DetailedOrder.menu),
+                joinedload(Orders.staff),
+                joinedload(Orders.customer)
+            )
         ).unique().scalar_one_or_none()
         
         if not order:
@@ -123,23 +162,41 @@ class OrdersService:
         return order
 
     @staticmethod
-    def update_order_status(db: Session, order_id: int, status_data: OrdersUpdateStatus):
+    def update_order_status(db: Session, order_id: int, status_data: OrdersUpdateStatus, current_staff_id: int = None):
         # Gunakan query dengan join ke Table untuk mempermudah pembebasan meja
         order = db.execute(
-            select(Orders).where(Orders.id == order_id)
-        ).scalar_one_or_none()
+            select(Orders).where(Orders.id == order_id).options(
+                joinedload(Orders.details),
+                joinedload(Orders.staff),
+                joinedload(Orders.customer)
+            )
+        ).unique().scalar_one_or_none()
         
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
+
+        # Jika staff melakukan update (terutama saat bayar), catat staff_id nya
+        if current_staff_id:
+            order.staff_id = current_staff_id
 
         if status_data.order_status:
             order.order_status = status_data.order_status
         
         if status_data.method:
             order.method = status_data.method
+
+        if status_data.discount is not None:
+            # Jika ada update diskon, kita hitung ulang total_amount yang disimpan
+            order.discount = status_data.discount
+            # Hitung subtotal kotor dari item-item (tanpa pajak/diskon)
+            gross_subtotal = sum(float(detail.subtotal) for detail in order.details)
+            # Terapkan diskon (%) baru baru pajak (%) 10
+            new_final = round((gross_subtotal * (1 - (float(order.discount) / 100))) * 1.1, 2)
+            order.total_amount = new_final
         
         if status_data.amount_paid is not None:
-            final_amount = float(order.total_amount) - float(order.discount or 0)
+            # total_amount di DB sekarang sudah absolute final (udah kena diskon % dan pajak 10)
+            final_amount = round(float(order.total_amount), 2)
             if status_data.amount_paid < final_amount:
                 raise HTTPException(
                     status_code=400,
@@ -191,10 +248,12 @@ class OrdersService:
             if not menu_item:
                 raise HTTPException(status_code=404, detail=f"Menu item {item.menu_id} not found")
             
-            if menu_item.status == "outOfStock":
+            # Use value if it's an enum
+            menu_item_status = menu_item.status.value if hasattr(menu_item.status, "value") else menu_item.status
+            if menu_item_status == "outOfStock":
                 raise HTTPException(status_code=400, detail=f"Menu {menu_item.name} is out of stock")
 
-            if menu_item.daily_portion < item.quantity:
+            if float(menu_item.daily_portion) < item.quantity:
                 raise HTTPException(
                     status_code=400, 
                     detail=f"Not enough stock for {menu_item.name}. Remaining: {menu_item.daily_portion}"
@@ -202,10 +261,10 @@ class OrdersService:
 
             # Deduct stock
             menu_item.daily_portion -= item.quantity
-            if menu_item.daily_portion == 0:
-                menu_item.status = "outOfStock"
+            if float(menu_item.daily_portion) <= 0:
+                menu_item.status = menuStatus.outofstock
 
-            subtotal = menu_item.price * item.quantity
+            subtotal = float(menu_item.price) * item.quantity
             added_total += subtotal
 
             # Add to DetailedOrder
@@ -218,8 +277,10 @@ class OrdersService:
                 subtotal=subtotal
             ))
 
-        # 3. Update Order Total
-        order.total_amount += added_total
+        # 3. Update Order Total (diskon % dulu baru tambah pajak 10%)
+        discount_multiplier = 1 - (float(order.discount or 0) / 100.0)
+        added_after_discount_tax = round((float(added_total) * discount_multiplier) * 1.1, 2)
+        order.total_amount = float(order.total_amount) + added_after_discount_tax
         
         db.commit()
         db.refresh(order)
@@ -228,7 +289,11 @@ class OrdersService:
         return db.execute(
             select(Orders)
             .where(Orders.id == order.id)
-            .options(joinedload(Orders.details).joinedload(DetailedOrder.menu))
+            .options(
+                joinedload(Orders.details).joinedload(DetailedOrder.menu),
+                joinedload(Orders.staff),
+                joinedload(Orders.customer)
+            )
         ).unique().scalar_one()
 
     @staticmethod
@@ -255,6 +320,7 @@ class OrdersService:
         total_orders = db.execute(total_orders_query).scalar() or 0
         
         # Total revenue (sum of paid orders in the last 30 days)
+        # di database, total_amount sudah absolute final (sudah dipotong diskon & tambah pajak)
         total_revenue_query = select(func.sum(Orders.total_amount)).where(
             Orders.date >= one_month_ago,
             Orders.payment_status == paymentStatus.paid
