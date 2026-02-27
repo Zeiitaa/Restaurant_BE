@@ -69,7 +69,7 @@ def delete_menu(db:Session, id:int):
         raise HTTPException(status_code=400, detail="Menu is already out of stock")
     
     menu.status = menuStatus.outofstock
-    
+    menu.daily_portion = 0  # Set daily portion to 0 to reflect out of stock
     db.commit()
     db.refresh(menu)
     return menu
