@@ -21,6 +21,7 @@ class UserRole(str, Enum):
 class UserBase(BaseModel):
     username: str = Field(..., description="Please input your username", examples=["Zeita"])
     status: UserStatus = Field(..., description="Please input your status", examples=[UserStatus.active])    
+    email: Optional[str] = Field(None, description="Please input your email", examples=["user@example.com"])
     role: UserRole = Field(..., description="Please input your role", examples=[UserRole.waiters])
 
 class UserCreate(UserBase):

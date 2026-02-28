@@ -1,5 +1,5 @@
-from ormModels import Menu, Update_stock, menuStatus
-from app.models.Update_Stock.upstock_schema import UpstockCreate, UpstockDelete, UpstockResponse, UpstockUpdate
+from ormModels import Menu, Update_stock, menuStatus, Users, Category
+from app.models.Update_Stock.upstock_schema import UpstockCreate, UpstockDelete, UpstockResponse, UpstockUpdate, UserSimpleResponse, MenuSimpleResponse
 from app.models.Menu.menu_schema import MenuUpdate
 from fastapi import HTTPException
 from sqlalchemy import update
@@ -9,14 +9,50 @@ from sqlalchemy.orm import Session
 # get all
 
 def get_all_upstock(db:Session):
-    return db.query(Update_stock).all()
+    upstocks = db.query(Update_stock).all()
+    results = []
+    for u in upstocks:
+        # Get staff info
+        staff_info = db.query(Users).filter(Users.id == u.users_id).first()
+        
+        # Get menu and category info
+        menu_info = db.query(Menu).filter(Menu.id == u.menu_id).first()
+        category_name = "-"
+        if menu_info and menu_info.category:
+            category_name = menu_info.category.name
+
+        results.append(UpstockResponse(
+            id=u.id,
+            menu_id=u.menu_id,
+            stock_after=u.stock_after,
+            date=u.date,
+            menu=MenuSimpleResponse(name=menu_info.name, category=category_name) if menu_info else None,
+            staff=UserSimpleResponse(id=staff_info.id, username=staff_info.username) if staff_info else None
+        ))
+    return results
 
 # get by id
 def get_upstock_by_id(db:Session, id:int):
-    upstock = db.query(Update_stock).filter(Update_stock.id == id).first()
-    if not upstock:
+    u = db.query(Update_stock).filter(Update_stock.id == id).first()
+    if not u:
         raise HTTPException(status_code=404, detail="Update Stock not found")
-    return upstock
+    
+    staff_info = db.query(Users).filter(Users.id == u.users_id).first()
+    
+    # Get menu info
+    menu_info = db.query(Menu).filter(Menu.id == u.menu_id).first()
+    category_name = "-"
+    if menu_info and menu_info.category:
+        category_name = menu_info.category.name
+
+    return UpstockResponse(
+        id=u.id,
+        menu_id=u.menu_id,
+        stock_after=u.stock_after,
+        date=u.date,
+        menu=MenuSimpleResponse(name=menu_info.name, category=category_name) if menu_info else None,
+        staff=UserSimpleResponse(id=staff_info.id, username=staff_info.username) if staff_info else None
+    )
 
 # Create upstock
 def create_upstock_id(db:Session, request:UpstockCreate):
@@ -44,5 +80,21 @@ def create_upstock_id(db:Session, request:UpstockCreate):
     db.add(new_upstock)
     db.commit()
     db.refresh(new_upstock)
-    return new_upstock
+    
+    # Get staff info for response
+    staff_info = db.query(Users).filter(Users.id == new_upstock.users_id).first()
+    
+    # Get category name
+    category_name = "-"
+    if menu.category:
+        category_name = menu.category.name
+
+    return UpstockResponse(
+        id=new_upstock.id,
+        menu_id=new_upstock.menu_id,
+        stock_after=new_upstock.stock_after,
+        date=new_upstock.date,
+        menu=MenuSimpleResponse(name=menu.name, category=category_name),
+        staff=UserSimpleResponse(id=staff_info.id, username=staff_info.username) if staff_info else None
+    )
 

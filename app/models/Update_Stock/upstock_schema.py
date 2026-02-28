@@ -4,6 +4,18 @@ from typing import Optional
 
 from enum import Enum
 
+# user simple response
+class UserSimpleResponse(BaseModel):
+    id: int
+    username: str
+    model_config = ConfigDict(from_attributes=True)
+
+# menu simple response
+class MenuSimpleResponse(BaseModel):
+    name: str
+    category: str
+    model_config = ConfigDict(from_attributes=True)
+
 # base
 class UpstockBase(BaseModel):
     menu_id: int = Field(..., description="menu_id", examples=[1])
@@ -23,8 +35,13 @@ class UpstockUpdate(BaseModel):
     users_id: Optional[int] = None
     
 # response
-class UpstockResponse(UpstockBase):
+class UpstockResponse(BaseModel):
     id: int
+    menu_id: int
+    stock_after: int
+    date: datetime
+    menu: Optional[MenuSimpleResponse] = None
+    staff: Optional[UserSimpleResponse] = None
     model_config = ConfigDict(from_attributes=True)
 
 # delete
