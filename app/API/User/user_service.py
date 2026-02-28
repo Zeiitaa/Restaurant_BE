@@ -1,4 +1,4 @@
-from app.models.User.user_schema import UserUpdate, UserRegister, UserResponse, UserCreate, UserDeact, UserDetailCreateBase, UserDetailUpdate, StaffDetailCreateBase, StaffDetailUpdate, StaffDetailResponse, UserandDetail
+from app.models.User.user_schema import UserDetailResponse, UserUpdate, UserRegister, UserResponse, UserCreate, UserDeact, UserDetailCreateBase, UserDetailUpdate, StaffDetailCreateBase, StaffDetailUpdate, StaffDetailResponse, UserandDetail
 from ormModels import Users, UserRole, UserStatus, UserDetails, StaffDetails
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ def create_user(db:Session, request:UserCreate):
     new_user = Users(
         username = request.username,
         password = hash_password(request.password),
+        email = request.email,
         status = UserStatus.active,
         role = request.role
     )
@@ -17,61 +18,145 @@ def create_user(db:Session, request:UserCreate):
     db.refresh(new_user)
     return new_user
 
-# untuk isi detail user dan staff
-def create_detail_user(db:Session, request:UserDetailCreateBase, user_id:int):
-    new_detail_user = UserDetails(
-        name = request.name,
-        phone_number = request.phone_number,
-        address = request.address,
-        users_id = user_id
-    )
-    db.add(new_detail_user)
+# untuk isi detail user dan staff (otomatis mendeteksi role)
+def create_detail_user(db: Session, request: UserDetailCreateBase, user_id: int):
+    # Cari usernya dulu untuk cek rolenya
+    user = db.query(Users).filter(Users.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Debugging: Print role untuk memastikan logika benar
+    print(f"DEBUG: User {user.username} has role {user.role} (type: {type(user.role)})")
+    
+    # List role yang masuk ke StaffDetails
+    staff_roles = [UserRole.manager, UserRole.waiters, UserRole.employee]
+    
+    # Pastikan perbandingan enum benar (menggunakan .value jika perlu, tapi SQLAlchemy Enum biasanya oke langsung)
+    is_staff = user.role in staff_roles
+    
+    if is_staff:
+        new_detail = StaffDetails(
+            name=request.name,
+            phone_number=request.phone_number,
+            address=request.address,
+            users_id=user_id
+        )
+        print("DEBUG: Inserting into StaffDetails")
+    else:
+        new_detail = UserDetails(
+            name=request.name,
+            phone_number=request.phone_number,
+            address=request.address,
+            users_id=user_id
+        )
+        print("DEBUG: Inserting into UserDetails")
+        
+    db.add(new_detail)
     db.commit()
-    db.refresh(new_detail_user)
-    return new_detail_user
-
-def create_detail_staff(db:Session, request:StaffDetailCreateBase, user_id:int):
-    new_detail_staff = StaffDetails(
-        name = request.name,
-        phone_number = request.phone_number,
-        address = request.address,
-        users_id = user_id
-    )
-    db.add(new_detail_staff)
-    db.commit()
-    db.refresh(new_detail_staff)
-    return new_detail_staff
+    db.refresh(new_detail)
+    return new_detail
 
 #ambil semua data user
 def get_all_user(db:Session):
-    return db.query (Users).all()
+    # Hanya ambil yang statusnya active atau inactive
+    return db.query(Users).filter(Users.status.in_([UserStatus.active, UserStatus.inactive])).all()
 
 def get_all_user_detailed(db: Session):
-    # Melakukan JOIN antara Users dan UserDetails
-    results = db.query(Users, UserDetails).join(UserDetails, Users.id == UserDetails.users_id).all()
+    # Melakukan JOIN antara Users dan UserDetails (dan StaffDetails sebagai fallback)
+    results = db.query(Users, StaffDetails, UserDetails)\
+        .outerjoin(StaffDetails, Users.id == StaffDetails.users_id)\
+        .outerjoin(UserDetails, Users.id == UserDetails.users_id)\
+        .filter(Users.status.in_([UserStatus.active, UserStatus.inactive])).all()
     
-    # Mapping hasil join ke schema UserandDetail
+    # Mapping hasil ke schema UserandDetail
     user_list = []
-    for user, detail in results:
+    for user, s_detail, u_detail in results:
+        detail = s_detail if s_detail else u_detail
         user_list.append(UserandDetail(
             id=user.id,
             username=user.username,
             status=user.status.value,
             role=user.role.value,
-            name=detail.name,
-            phone_number=detail.phone_number,
-            address=detail.address
+            name=detail.name if detail else "-",
+            phone_number=detail.phone_number if detail else "-",
+            address=detail.address if detail else "-"
         ))
     return user_list
 
-
-# ambil data user sesuai ID
-def get_user(id:int, db:Session):
-    # Cek apakah ID ini benar atau engga
-    user = db.query(Users).filter(Users.id == id).first()
+# ambil data user sesuai ID (Support join ke tabel manapun)
+def get_user(id: int, db: Session):
+    user = db.query(Users).filter(Users.id == id, Users.status.in_([UserStatus.active, UserStatus.inactive])).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Can't find user")
-    return user
+        raise HTTPException(status_code=404, detail="Can't find user or user is not active")
+    
+    # Cek detail di kedua tabel
+    staff_detail = db.query(StaffDetails).filter(StaffDetails.users_id == id).first()
+    user_detail = db.query(UserDetails).filter(UserDetails.users_id == id).first()
+    
+    # Tentukan detail yang ditemukan
+    detail = staff_detail if staff_detail else user_detail
+
+    # Kembalikan objek UserandDetail yang diharapkan schema
+    return UserandDetail(
+        id=user.id,
+        username=user.username,
+        status=user.status.value,
+        role=user.role.value,
+        name=detail.name if detail else "-",
+        phone_number=detail.phone_number if detail else "-",
+        address=detail.address if detail else "-"
+    )
+
+def get_staff_and_details(db: Session):
+    # Get user details for all staff roles (manager, waiters, employee)
+    staff_roles = [UserRole.manager, UserRole.waiters, UserRole.employee]
+    
+    # Ambil data dari Users, StaffDetails, dan UserDetails (backup)
+    results = db.query(Users, StaffDetails, UserDetails)\
+        .outerjoin(StaffDetails, Users.id == StaffDetails.users_id)\
+        .outerjoin(UserDetails, Users.id == UserDetails.users_id)\
+        .filter(
+            Users.role.in_(staff_roles),
+            Users.status.in_([UserStatus.active, UserStatus.inactive])
+        ).all()
+    
+    staff_list = []
+    for user, staff_detail, user_detail in results:
+        # Gunakan staff_detail jika ada, jika tidak gunakan user_detail sebagai fallback
+        detail = staff_detail if staff_detail else user_detail
+        
+        staff_list.append(UserandDetail(
+            id=user.id,
+            username=user.username,
+            status=user.status.value,
+            role=user.role.value,
+            name=detail.name if detail else "-",
+            phone_number=detail.phone_number if detail else "-",
+            address=detail.address if detail else "-"
+        ))
+    return staff_list
+
+def get_customers_and_details(db: Session): 
+    # Get user details for all customers (use outerjoin to include those without details)
+    results = db.query(Users, UserDetails)\
+        .outerjoin(UserDetails, Users.id == UserDetails.users_id)\
+        .filter(
+            Users.role == UserRole.customer,
+            Users.status.in_([UserStatus.active, UserStatus.inactive])
+        ).all()
+    
+    customers_list = []
+    for user, user_detail in results:
+        customers_list.append(UserandDetail(
+            id=user.id,
+            username=user.username,
+            status=user.status.value,
+            role=user.role.value,
+            name=user_detail.name if user_detail else "-",
+            phone_number=user_detail.phone_number if user_detail else "-",
+            address=user_detail.address if user_detail else "-"
+        ))
+    return customers_list   
 
 # Update user
 def update_user(id: int, request: UserUpdate, db: Session):

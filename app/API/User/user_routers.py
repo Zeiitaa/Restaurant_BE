@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.models.User.user_schema import UserCreate, UserUpdate, UserResponse, UserRegister, UserDeact, UserandDetail, UserDetailResponse, UserDetailCreateBase
-from ormModels import UserRole
+from ormModels import UserRole, Users
 from app.core.auth import get_current_user, require_role
 from app.API.User import user_service
 import database
@@ -29,10 +29,20 @@ def create_user_detail(user_id:int, request:UserDetailCreateBase, db:Session = D
 def get_all_user(db:Session = Depends(database.getDB)):
     return user_service.get_all_user(db)
 
-# get all with details
-@router.get("/details", response_model=list[UserandDetail])
-def get_user_and_detail(db: Session = Depends(database.getDB)):
-    return user_service.get_all_user_detailed(db)
+# get profile with details (only for current user)
+@router.get("/details", response_model=UserandDetail)
+def get_my_details(current_user: Users = Depends(get_current_user), db: Session = Depends(database.getDB)):
+    return user_service.get_user(current_user.id, db)
+
+# get all waiters with details
+@router.get("/staff", response_model=list[UserandDetail], dependencies=[Depends(require_role(UserRole.admin, UserRole.manager))])
+def get_staff(db: Session = Depends(database.getDB)):
+    return user_service.get_staff_and_details(db)
+
+# get customers with details
+@router.get("/customers", response_model=list[UserandDetail], dependencies=[Depends(require_role(UserRole.admin, UserRole.manager))])
+def get_customers(db: Session = Depends(database.getDB)):
+    return user_service.get_customers_and_details(db)
 
 # get by ID
 @router.get("/{id}", response_model=UserResponse, dependencies=[Depends(require_role(UserRole.admin, UserRole.manager))])

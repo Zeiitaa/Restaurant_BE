@@ -16,9 +16,6 @@ import time
 load_dotenv()
 
 # --- SETUP MIDTRANS CORE API ---
-# Taruh Server Key di sini (Biarin is_production=False karena kita pakai Sandbox)
-# NOTE: Replace 'YOUR_SERVER_KEY' and 'YOUR_CLIENT_KEY' with your actual Midtrans keys during development or load from env
-# Strip any surrounding quotes or whitespace from the keys
 
 server_key = os.getenv("MIDTRANS_SERVER_KEY", "").strip()
 client_key = os.getenv("MIDTRANS_CLIENT_KEY", "").strip()

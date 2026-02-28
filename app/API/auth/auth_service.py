@@ -29,6 +29,14 @@ def authenticate_user(db: Session, username: str, password: str) -> Users:
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Incorrect username or password"
         )
+    
+    # Cek apakah user statusnya active atau inactive
+    if user.status not in [UserStatus.active, UserStatus.inactive]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Account is {user.status.value} and cannot login"
+        )
+        
     return user
 
 
